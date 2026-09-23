@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@ ext.IS_MAVEN_PUBLISH = Boolean.parseBoolean(MAVEN_PUBLISH)
 defineProperty("MAVEN_VERSION", IS_MAVEN_PUBLISH ? (ext.IS_MILESTONE_FCS ? project.ext.RELEASE_VERSION_SHORT : project.ext.RELEASE_VERSION_LONG) : "")
 ext.MAVEN_GROUP_ID = "org.openjfx"
 
-logger.quiet("MAVEN_PUBLISH: $MAVEN_PUBLISH")
+logger.quiet("MAVEN_PUBLISH: $IS_MAVEN_PUBLISH")
 logger.quiet("MAVEN_VERSION: $MAVEN_VERSION")
 
 registerModules()
@@ -67,22 +67,16 @@ void registerModules() {
     addMavenPublication(project(":incubator.richtext"), [ controls, incubatorInput ])
 }
 
-ext.configureMavenPublication = { List<Project> projects, CompileTarget t, Task previousTask ->
-    if (!IS_MAVEN_PUBLISH) {
-        return
-    }
-
+ext.configurePublication = { List<Project> projects, CompileTarget t, Task previousTask ->
     def targetProperties = project.ext[t.upper]
     def platformPrefix = targetProperties.platformPrefix
 
-    // Maven Publications
     def publicationDirName = "${platformPrefix}publications"
     def publicationDir = "${rootProject.layout.buildDirectory.get()}/${publicationDirName}"
 
     projects.each { Project project ->
         def moduleName = project.ext.moduleName
         def buildDir = project.layout.buildDirectory.get()
-        def sourceDir = project.sourceSets.main.allJava
 
         def dstModularJarDir="${publicationDir}"
         def srcClassesDir = "${buildDir}/${platformPrefix}module-classes"
@@ -111,13 +105,9 @@ ext.configureMavenPublication = { List<Project> projects, CompileTarget t, Task 
             from srcClassesDir
         }
 
-        def modularPublicationSourcesJarName = "${moduleName}-sources.jar"
-        project.tasks.register("modulePublicationSourcesJar${t.capital}", Jar) {
+        // Only run during the all task.
+        rootProject.tasks.named("all").configure {
             dependsOn modularPublicationJarTask
-
-            destinationDirectory = file("${dstModularJarDir}")
-            archiveFileName = modularPublicationSourcesJarName
-            from sourceDir
         }
     }
 }
@@ -169,10 +159,10 @@ void addMavenPublication(Project project, List<Project> projectDependencies) {
                 def repositoryUrl = project.hasProperty('repositoryUrl') ? project.getProperty('repositoryUrl') : ""
                 def repositoryUsername = project.hasProperty('repositoryUsername') ? project.getProperty('repositoryUsername') : ""
                 def repositoryPassword = project.hasProperty('repositoryPassword') ? project.getProperty('repositoryPassword') : ""
-                url repositoryUrl
+                url = repositoryUrl
                 credentials {
-                    username repositoryUsername
-                    password repositoryPassword
+                    username = repositoryUsername
+                    password = repositoryPassword
                 }
             }
         }
@@ -189,9 +179,6 @@ void addMavenPublication(Project project, List<Project> projectDependencies) {
                         artifact project.tasks."moduleEmptyPublicationJar$t.capital"
                         artifact project.tasks."modularPublicationJar$t.capital" {
                             archiveClassifier.set("$t.name")
-                        }
-                        artifact project.tasks."modulePublicationSourcesJar$t.capital" {
-                            archiveClassifier.set("sources")
                         }
                     }
 
