@@ -356,7 +356,85 @@ void PathJava::applySegments(const PathSegmentApplier& applier) const
 
 bool PathJava::applyElements(const PathElementApplier& applier) const
 {
-    // need to implement this method after looking into cairo implementation
+    ASSERT(m_platformPath);
+
+    JNIEnv* env = WTF::GetJavaEnv();
+
+    static jmethodID mid = env->GetMethodID(PG_GetPathClass(env),
+        "getPathIterator", "()Lcom/sun/webkit/graphics/WCPathIterator;");
+    ASSERT(mid);
+
+    JLObject iter(env->CallObjectMethod(*m_platformPath, mid));
+    if (WTF::CheckAndClearException(env) || !iter)
+        return true;
+
+    static jmethodID midIsDone = env->GetMethodID(PG_GetPathIteratorClass(env),
+        "isDone", "()Z");
+    ASSERT(midIsDone);
+
+    static jmethodID midNext = env->GetMethodID(PG_GetPathIteratorClass(env),
+        "next", "()V");
+    ASSERT(midNext);
+
+    static jmethodID midCurrentSegment = env->GetMethodID(PG_GetPathIteratorClass(env),
+        "currentSegment", "([D)I");
+    ASSERT(midCurrentSegment);
+
+    JLocalRef<jdoubleArray> coords(env->NewDoubleArray(6));
+    if (WTF::CheckAndClearException(env) || !coords)
+        return true;
+
+    jdouble data[6];
+    PathElement pathElement;
+
+    while (true) {
+        jboolean isDone = env->CallBooleanMethod(iter, midIsDone);
+        if (WTF::CheckAndClearException(env) || isDone)
+            break;
+
+        jint type = env->CallIntMethod(iter, midCurrentSegment, (jdoubleArray)coords);
+        if (WTF::CheckAndClearException(env))
+            break;
+
+        env->GetDoubleArrayRegion(coords, 0, 6, data);
+        if (WTF::CheckAndClearException(env))
+            break;
+
+        switch (type) {
+        case com_sun_webkit_graphics_WCPathIterator_SEG_MOVETO:
+            pathElement.type = PathElement::Type::MoveToPoint;
+            pathElement.points[0] = FloatPoint(data[0], data[1]);
+            applier(pathElement);
+            break;
+        case com_sun_webkit_graphics_WCPathIterator_SEG_LINETO:
+            pathElement.type = PathElement::Type::AddLineToPoint;
+            pathElement.points[0] = FloatPoint(data[0], data[1]);
+            applier(pathElement);
+            break;
+        case com_sun_webkit_graphics_WCPathIterator_SEG_QUADTO:
+            pathElement.type = PathElement::Type::AddQuadCurveToPoint;
+            pathElement.points[0] = FloatPoint(data[0], data[1]);
+            pathElement.points[1] = FloatPoint(data[2], data[3]);
+            applier(pathElement);
+            break;
+        case com_sun_webkit_graphics_WCPathIterator_SEG_CUBICTO:
+            pathElement.type = PathElement::Type::AddCurveToPoint;
+            pathElement.points[0] = FloatPoint(data[0], data[1]);
+            pathElement.points[1] = FloatPoint(data[2], data[3]);
+            pathElement.points[2] = FloatPoint(data[4], data[5]);
+            applier(pathElement);
+            break;
+        case com_sun_webkit_graphics_WCPathIterator_SEG_CLOSE:
+            pathElement.type = PathElement::Type::CloseSubpath;
+            applier(pathElement);
+            break;
+        }
+
+        env->CallVoidMethod(iter, midNext);
+        if (WTF::CheckAndClearException(env))
+            break;
+    }
+
     return true;
 }
 

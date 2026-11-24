@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -78,6 +78,43 @@ public class SVGTest extends TestBase {
                     pathData);
             assertEquals((double) expected[0], totalLength, (double) expected[1], msg);
         });
+    }
+
+    /**
+     * @test
+     * @bug 8398000
+     * summary circle.getTotalLength() must not be 0
+     */
+    @Test
+    @Timeout(30)
+    public void test8398000CircleGetTotalLength() {
+        loadContent("<svg xmlns='http://www.w3.org/2000/svg'>" +
+                "<circle id='c' cx='60' cy='60' r='50'/></svg>");
+        final double totalLength = ((Number) executeScript(
+                "document.getElementById('c').getTotalLength();")).doubleValue();
+        assertEquals(2 * Math.PI * 50, totalLength, 0.5, "circle.getTotalLength()");
+    }
+
+    /**
+     * @test
+     * @bug 8398000
+     * summary polyline.getTotalLength() must not change after hit testing
+     */
+    @Test
+    @Timeout(30)
+    public void test8398000PolylineGetTotalLengthAfterIsPointInFill() {
+        loadContent("<svg xmlns='http://www.w3.org/2000/svg'>" +
+                "<polyline id='p' fill='none' points='0,0 100,0 100,100'/></svg>");
+        final String getTotalLength = "document.getElementById('p').getTotalLength();";
+        assertEquals(200.0, ((Number) executeScript(getTotalLength)).doubleValue(), 0.001,
+                "polyline.getTotalLength() before isPointInFill");
+
+        // isPointInFill hit-tests the renderer's cached Path, which converts it to
+        // the platform (Java) path. getTotalLength() then measures that platform path.
+        executeScript("document.getElementById('p').isPointInFill(new DOMPoint(90, 10));");
+
+        assertEquals(200.0, ((Number) executeScript(getTotalLength)).doubleValue(), 0.001,
+                "polyline.getTotalLength() after isPointInFill");
     }
 
     @Test
